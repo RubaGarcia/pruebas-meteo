@@ -137,7 +137,7 @@ crop_list=["maize","wheat","soybean","rice"]
 
 
 experiment_list=["ssp126","ssp370","ssp585"]
-experiment_list=["ssp370"]
+experiment_list=["ssp126"]
 
 # Define the periods with their start and end years
 periods = {
@@ -147,7 +147,7 @@ periods = {
 }
 
 baseline =  "1983-2013"
-
+root ="/home/adri/ISIMIP-simulations/www.pik-potsdam.de/~jonasjae"
 
 for crop_name in crop_list:
     for experiment in experiment_list:
@@ -155,7 +155,7 @@ for crop_name in crop_list:
         for member in combined_list:
             try:
             
-                file_path = f'datasets/GGCMI_Phase3_annual_{experiment}_{member}.nc4'
+                file_path = f'{root}/datasets/GGCMI_Phase3_annual_{experiment}_{member}.nc4'
                 if not os.path.exists(file_path):
                     print(colored('[SKIP]', 'red'),'Fichero no encontrado')
                     continue
@@ -231,7 +231,7 @@ for crop_name in crop_list:
         ensemble_sign = anom_sign.sel(member='ensemble_mean')
         members_sign = anom_sign.drop_sel(member='ensemble_mean')
 
-        equal_sign = xr.ufuncs.equal(members_sign, ensemble_sign)
+        equal_sign = members_sign== ensemble_sign
         equal_sign = equal_sign.where(~np.isnan(members_sign))
 
         agreement_fraction = equal_sign.mean(dim='member', skipna=True)
