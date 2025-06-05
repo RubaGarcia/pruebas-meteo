@@ -1,7 +1,14 @@
 import numpy as np
 import xarray as xr
 import os
+import copy
 from termcolor import colored
+import math
+
+from warming_levels import obtener_rangos_por_warming_level, conditional_nanmean
+import warnings
+warnings.filterwarnings("ignore", category=RuntimeWarning)
+
 
 def write_to_netcdf(dataset: xr.Dataset, path: str, var: str = None) :
     """
@@ -43,82 +50,7 @@ def select_crop(ds, crop_name):
     crop_index=crop_mapping[crop_name]
     return ds.sel(crop=crop_index)
 
-
-
-def select_data_for_warming_level_time_range(
-    self,
-    dataset: xr.Dataset,
-    level: str,
-    time_filter_range: str,
-    aggregation_stat: str,
-):
-    """
-    TODO:Acabar de arreglarlo y ver como funciona el método
-    Select data from the given dataset for the time period according to warming levels.
-
-    Parameters
-    ----------
-    dataset: xarray.Dataset
-        The dataset containing the historical and future data.
-    level: float
-        The warming level to select data for.
-    time_filter_range: slice
-        The time range to filter the data with.
-    aggregation_stat: str
-        A string indicating the statistic applied as the aggregation function.
-
-    Returns
-    -------
-    xarray.Dataset
-        A dataset containing the selected data for the specified warming level
-        and time range.
-    """
-    # Make static dataset to be filled. Same as "dataset" without time dim
-    data_for_members = []
-    data_for_members_clim = []
-    # Iterate over the members inside the dataset
-    for mem_id in range(len(dataset.member_id)):
-        # Get the data for the member, but having the member dimension yet
-        data_for_member = dataset.isel(member_id=slice(mem_id, mem_id + 1))
-
-        # Get the member name
-        member_name = str(data_for_member.member_id.values[0])
-
-        period_range = self.get_time_range_when_warming_level_is_reached(
-            warming_level=level,
-            member=member_name,
-        )
-
-        # If empty, continue to next member
-        if period_range == "":
-            continue
-
-        # If the value is 9999,
-        # it indicates that warming level is not reached
-        elif (
-            period_range == "9999" or period_range == 9999 or period_range == 9999.0
-        ):
-            continue
-
-        # The other option is the "time_period"
-        # to be a string like "2016-2035"
-        else:
-            data_for_member, data_for_member_clim = TemporalAggregation(
-                dataset=data_for_member,
-                period_range=period_range,
-                time_filter=time_filter_range,
-                statistical=aggregation_stat,
-                product_type=self.product_type,
-            ).compute()
-        # Assign data to the pre-generated dataset
-        data_for_members.append(data_for_member)
-        data_for_members_clim.append(data_for_member_clim)
-    if len(data_for_members) == 0 or len(data_for_members_clim) == 0:
-        raise EmptyDatasetListError()
-    data_for_members = xr.concat(data_for_members, dim="member_id")
-    data_for_members_clim = xr.xarray.concat(data_for_members_clim, dim="member_id")
-    return data_for_members, data_for_members_clim
-
+#call the warming levels function
 
 # os.system('color')
 
@@ -127,7 +59,6 @@ def select_data_for_warming_level_time_range(
 gcm_list=["gfdl-esm4","ipsl-cm6a-lr","mpi-esm1-2-hr","mri-esm2-0","ukesm1-0-ll"]
 crop_model_list=[ "acea","crover","cygma1p74","dssat-pythia","epic-iiasa", "isam","ldndc", "lpjml", "pdssat", "pepic", "promet","simplace-lintul5"]
 # Combine each element of gcm_list with each element of crop_model_list
-combined_list = [f"{gcm}_{crop}" for gcm in gcm_list for crop in crop_model_list]
 # combined_list = ["gfdl-esm4_crover"]
 
 
@@ -137,107 +68,143 @@ crop_list=["maize","wheat","soybean","rice"]
 
 
 experiment_list=["ssp126","ssp370","ssp585"]
-experiment_list=["ssp126"]
+# experiment_list=["ssp126"]
 
 # Define the periods with their start and end years
 periods = {
     'near': {'slice': slice(2016, 2035), 'range': '2016-2035'},
     'medium': {'slice': slice(2046, 2065), 'range': '2046-2065'},
-    'far': {'slice': slice(2081, 2100), 'range': '2081-2100'}
+    'far': {'slice': slice(2081, 2100), 'range': '2081-2100'},
+    'warming_1.5': None,  # Placeholder for warming levels
+    'warming_2.0': None,  # Placeholder for warming levels
+    'warming_3.0': None,  # Placeholder for warming levels
 }
 
 baseline =  "1983-2013"
-root ="/home/adri/ISIMIP-simulations/www.pik-potsdam.de/~jonasjae"
+
+warming_levels = [1.5, 2.0, 3.0]
+csv_warmign_levels = 'CMIP6_WarmingLevels.csv'
+
+warming_dict = {
+    wl: obtener_rangos_por_warming_level(csv_warmign_levels, wl) 
+    for wl in warming_levels
+}
+
+
+combined_list = [f"{gcm}_{crop}" for gcm in gcm_list for crop in crop_model_list]
+
+
+warming_values = {}
+
+for warming_level, gcm_text_dict in warming_dict.items():
+    for texto_gcm, experiment_dict in gcm_text_dict.items():
+        for gcm in gcm_list:
+            if gcm in texto_gcm:
+                for experiment, valor in experiment_dict.items():
+                    warming_values[(warming_level, gcm, experiment)] = valor
+
+periods_gcm_experiment = {}
+
+for gcm in gcm_list:
+    for experiment in experiment_list:
+        # Empezamos con los periodos fijos
+        periods_gcm_experiment[(gcm, experiment)] = periods.copy()
+
+        # Ahora agregamos los periodos warming
+        for wl in warming_levels:
+            valor = warming_values.get((wl, gcm, experiment), None)
+            if valor is not None:
+                # Aquí interpretamos 'valor' para construir el periodo warming
+                # Por ejemplo, si 'valor' es un string tipo "2041-2060"
+                try:
+                    start_year, end_year = map(int, valor.split('-'))
+                    periods_gcm_experiment[(gcm, experiment)][f'warming_{wl}'] = {
+                        'slice': slice(start_year, end_year),
+                        'range': f'GWL {wl}'
+                    }
+                except Exception as e:
+                    # Si no puedes interpretar el valor, lo marcas o pones None
+                    periods_gcm_experiment[(gcm, experiment)][f'warming_{wl}'] = None
+            else:
+                periods_gcm_experiment[(gcm, experiment)][f'warming_{wl}'] = None
 
 for crop_name in crop_list:
     for experiment in experiment_list:
         member_data=[]
         for member in combined_list:
             try:
-            
-                file_path = f'{root}/datasets/GGCMI_Phase3_annual_{experiment}_{member}.nc4'
+                file_path = f'datasets/GGCMI_Phase3_annual_{experiment}_{member}.nc4'
+
                 if not os.path.exists(file_path):
                     print(colored('[SKIP]', 'red'),'Fichero no encontrado')
                     continue
-                ds_all = xr.open_dataset(file_path)
-                ds_crop=select_crop(ds_all, crop_name)
-                # print(ds_all.coords['crop'])
-                # Create a list to store the mean data for each period
-                mean_data = []
-                
-                # print(ds_crop["yield change"].isel(years=0).values)
-                # Calculate the time mean for each period
-                for period_name, period_info in periods.items():
-                    # Select the data for the current period
-                    ds_period = ds_crop.sel(years=period_info['slice'])
 
-                    # Validamos que el mapa no tenga min = max (sin variación)
+                ds_all = xr.open_dataset(file_path)
+                
+                ds_crop=select_crop(ds_all, crop_name)
+                mean_data = []
+                gcm = member.split('_')[0]
+
+                periods_for_gcm_exp = periods_gcm_experiment.get((gcm, experiment), periods)
+
+                for period_name, period_info in periods_for_gcm_exp.items():
+                    if period_info is None:
+                        continue
+
+                    ds_period = ds_crop.sel(years=period_info['slice'])
                     yc_values = ds_period['yield change'].values
 
                     if np.isnan(yc_values).all():
                         print(colored(f'[SKIP] {member} - {period_name} tiene todo NaN en yield change', 'red'))
                         continue
 
-                    # Calculate the time mean
+                    # Obtener el eje de 'years' correctamente
+                    years_axis = ds_period['yield change'].get_axis_num('years')
+                    nan_fraction = np.isnan(yc_values).sum(axis=years_axis) / yc_values.shape[years_axis]
+                    mask = nan_fraction > 0.2
+
                     ds_period_mean = ds_period.mean(dim='years', skipna=True)
+                    ds_period_mean['yield change'] = ds_period_mean['yield change'].where(~mask)
 
-                    # Add a 'period' coordinate with the period range
-                    ds_period_mean = ds_period_mean.expand_dims({'period': [period_info['range']]})#TODO no vale skipna
-                    # Add a 'baseline' coordinate with the baseline range
+                    ds_period_mean = ds_period_mean.expand_dims({'period': [period_info['range']]})
                     ds_period_mean = ds_period_mean.expand_dims({'baseline': [baseline]})
-                    # Add a 'model' coordinate with the models ciombination 
-                    ds_period_mean = ds_period_mean.expand_dims({'member': [member]})  
-                    # Append to the list
-
-                    
-
+                    ds_period_mean = ds_period_mean.expand_dims({'member': [member]})
                     print(colored(member, 'yellow'))
-
                     mean_data.append(ds_period_mean)
+                
             except Exception as e:
                 print (e, member)
             
-            # Concatenate the mean of each period data along the 'period' dimension
-            # ds_mean_member
-            if mean_data and len(mean_data) > 0:  # Si no está vacío
+            if mean_data and len(mean_data) > 0:
                 ds_mean_member = xr.concat(mean_data, dim='period')
+                _, unique_idx = np.unique(ds_mean_member['period'].values, return_index=True)
+                ds_mean_member = ds_mean_member.isel(period=sorted(unique_idx))
                 member_data.append(ds_mean_member)
             else:
                 print(colored(f'[SKIP] No hay datos válidos para el miembro {member} en el experimento {experiment} y cultivo {crop_name}', 'red'))
                 continue
 
-            # member_data.append(ds_mean_member)
-        # Concatenate the mean data of each period and each member data along the 'member' dimension
-        # print (member_data)
+        output_file_path = f'files/yield_climatology_{experiment}_{crop_name}.nc'
         if mean_data:
             ds_mean_all = xr.concat(member_data, dim='member')
-        # Write the result to a new NetCDF file
-        output_file_path = f'yield_climatology_{experiment}_{crop_name}.nc'
-        if mean_data:
-
-
-            ds_mean_all = xr.concat(member_data, dim='member')
-
-            # Calcular la media general a lo largo de todos los miembros
             ds_mean_general = ds_mean_all.mean(dim='member', keep_attrs=True)
-
-            # Añadir un identificador para la media general como un nuevo "miembro"
             ds_mean_general = ds_mean_general.expand_dims({'member': ['ensemble_mean']})
-
-            # Opción 1: Insertar la media al inicio
             ds_mean_all = xr.concat([ds_mean_general, ds_mean_all], dim='member')
-
+            if np.isnan(ds_mean_all['yield change'].values).all():
+                print(colored(f'[SKIP] Mapa vacío para {experiment} - {crop_name}', 'red'))
+                continue
         anom_sign = xr.apply_ufunc(np.sign, ds_mean_all['yield change'])
         ensemble_sign = anom_sign.sel(member='ensemble_mean')
         members_sign = anom_sign.drop_sel(member='ensemble_mean')
 
-        equal_sign = members_sign== ensemble_sign
+        equal_sign = members_sign == ensemble_sign
         equal_sign = equal_sign.where(~np.isnan(members_sign))
 
         agreement_fraction = equal_sign.mean(dim='member', skipna=True)
-        agreement_fraction = agreement_fraction.fillna(0)
 
-        yield_consensus_array = xr.where(agreement_fraction < 0.8, 1.0, 0.0).astype('float32')
+        yield_consensus_array = xr.where(
+            agreement_fraction < 0.8, 1.0, 0.0
+        ).where(~np.isnan(agreement_fraction)).astype('float32')
 
         consensus_da = xr.DataArray(
             data=yield_consensus_array,
@@ -256,16 +223,9 @@ for crop_name in crop_list:
             }
         )
 
-        # Asignar al dataset
         ds_mean_all['yield_consensus'] = consensus_da
-
 
         write_to_netcdf(ds_mean_all, output_file_path)
 
         print(colored(f"Data saved to {output_file_path}", 'green'))
         ds_all.close()
-        # # Concatenate the mean of each period data along the 'period' dimension
-        # if ds_mean_member:
-        #     ds_mean_member = xr.concat(mean_data, dim='period')
-        #     member_data.append(ds_mean_member)
-    
