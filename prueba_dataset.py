@@ -1,9 +1,7 @@
 import numpy as np
 import xarray as xr
 import os
-import copy
 from termcolor import colored
-import math
 
 from warming_levels import obtener_rangos_por_warming_level, conditional_nanmean
 import warnings
@@ -99,7 +97,9 @@ warming_values = {}
 for warming_level, gcm_text_dict in warming_dict.items():
     for texto_gcm, experiment_dict in gcm_text_dict.items():
         for gcm in gcm_list:
-            if gcm in texto_gcm:
+            # Si el gcm es 'mpi-esm1-2-hr', buscar como 'mpi-esm1-2-lr' en texto_gcm
+            search_gcm = 'mpi-esm1-2-lr' if gcm == 'mpi-esm1-2-hr' else gcm
+            if search_gcm in texto_gcm:
                 for experiment, valor in experiment_dict.items():
                     warming_values[(warming_level, gcm, experiment)] = valor
 
@@ -136,7 +136,7 @@ for crop_name in crop_list:
                 file_path = f'datasets/GGCMI_Phase3_annual_{experiment}_{member}.nc4'
 
                 if not os.path.exists(file_path):
-                    print(colored('[SKIP]', 'red'),'Fichero no encontrado')
+                    print(colored('[SKIP]', 'red'), 'File not found')
                     continue
 
                 ds_all = xr.open_dataset(file_path)
@@ -155,7 +155,7 @@ for crop_name in crop_list:
                     yc_values = ds_period['yield change'].values
 
                     if np.isnan(yc_values).all():
-                        print(colored(f'[SKIP] {member} - {period_name} tiene todo NaN en yield change', 'red'))
+                        print(colored(f'[SKIP] {member} - {period_name} has all NaN values in yield change', 'red'))
                         continue
 
                     # Obtener el eje de 'years' correctamente
@@ -181,7 +181,7 @@ for crop_name in crop_list:
                 ds_mean_member = ds_mean_member.isel(period=sorted(unique_idx))
                 member_data.append(ds_mean_member)
             else:
-                print(colored(f'[SKIP] No hay datos válidos para el miembro {member} en el experimento {experiment} y cultivo {crop_name}', 'red'))
+                print(colored(f'[SKIP] No valid data for member {member} in experiment {experiment} and crop {crop_name}', 'red'))
                 continue
 
         output_file_path = f'files/yield_climatology_{experiment}_{crop_name}.nc'
@@ -191,7 +191,7 @@ for crop_name in crop_list:
             ds_mean_general = ds_mean_general.expand_dims({'member': ['ensemble_mean']})
             ds_mean_all = xr.concat([ds_mean_general, ds_mean_all], dim='member')
             if np.isnan(ds_mean_all['yield change'].values).all():
-                print(colored(f'[SKIP] Mapa vacío para {experiment} - {crop_name}', 'red'))
+                print(colored(f'[SKIP] Empty map for {experiment} - {crop_name}', 'red'))
                 continue
         anom_sign = xr.apply_ufunc(np.sign, ds_mean_all['yield change'])
         ensemble_sign = anom_sign.sel(member='ensemble_mean')
