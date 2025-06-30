@@ -223,8 +223,8 @@ for crop_name in crop_list:
             }
         )
 
-        ds_mean_all['yield_consensus'] = consensus_da
-
+        ds_mean_all['yield_anom'] = consensus_da
+        
         write_to_netcdf(ds_mean_all, output_file_path)
 
         print(colored(f"Data saved to {output_file_path}", 'green'))
