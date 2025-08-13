@@ -43,7 +43,12 @@ def select_crop(ds, crop_name):
         'maize': 1,
         'wheat': 2,
         'soybean': 3,
-        'rice': 4
+        'rice': 4,
+        'millet': 5,
+        'sorghum': 6,
+        'cassava': 7,
+        'pulses': 8,
+        'potato': 9
     }
     crop_index=crop_mapping[crop_name]
     return ds.sel(crop=crop_index)
@@ -58,10 +63,11 @@ gcm_list=["gfdl-esm4","ipsl-cm6a-lr","mpi-esm1-2-hr","mri-esm2-0","ukesm1-0-ll"]
 crop_model_list=[ "acea","crover","cygma1p74","dssat-pythia","epic-iiasa", "isam","ldndc", "lpjml", "pdssat", "pepic", "promet","simplace-lintul5"]
 # Combine each element of gcm_list with each element of crop_model_list
 # combined_list = ["gfdl-esm4_crover"]
+crop_model_list = ["cygma1p74", "lpj-guess", "lpjml", "simplace-lintul5"]
 
 
 
-crop_list=["maize","wheat","soybean","rice"]
+crop_list=["maize","wheat","soybean","rice", "millet","sorghum","cassava","pulses","potato"]
 # Load the NetCDF file
 
 
@@ -133,8 +139,8 @@ for crop_name in crop_list:
         member_data=[]
         for member in combined_list:
             try:
-                file_path = f'datasets/GGCMI_Phase3_annual_{experiment}_{member}.nc4'
-
+                # file_path = f'datasets/GGCMI_Phase3_annual_{experiment}_{member}.nc4'
+                file_path = f'datasets/GGCMI_Phase3_annual_{experiment}_{member}_allcrops.nc4'
                 if not os.path.exists(file_path):
                     print(colored('[SKIP]', 'red'), 'File not found')
                     continue

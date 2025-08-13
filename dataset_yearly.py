@@ -25,12 +25,22 @@ def write_to_netcdf(dataset: xr.Dataset, path: str):
     dataset.to_netcdf(path=path, encoding=encoding, engine="netcdf4")
 
 def select_crop(ds, crop_name):
-    crop_mapping = {'maize': 1, 'wheat': 2, 'soybean': 3, 'rice': 4}
+    crop_mapping = {
+        'maize': 1,
+        'wheat': 2,
+        'soybean': 3,
+        'rice': 4,
+        'millet': 5,
+        'sorghum': 6,
+        'cassava': 7,
+        'pulses': 8,
+        'potato': 9
+    }
     return ds.sel(crop=crop_mapping[crop_name])
 
 gcm_list = ["gfdl-esm4", "ipsl-cm6a-lr", "mpi-esm1-2-hr", "mri-esm2-0", "ukesm1-0-ll"]
 crop_model_list = ["acea", "crover", "cygma1p74", "dssat-pythia", "epic-iiasa", "isam", "ldndc", "lpjml", "pdssat", "pepic", "promet", "simplace-lintul5"]
-crop_list = ["maize", "wheat", "soybean", "rice"]
+crop_list = ["maize", "wheat", "soybean", "rice", "millet", "sorghum", "cassava", "pulses", "potato"]
 experiment_list = ["ssp126", "ssp370", "ssp585"]
 combined_list = [f"{gcm}_{crop}" for gcm in gcm_list for crop in crop_model_list]
 
@@ -39,7 +49,8 @@ for crop_name in crop_list:
         member_data = []
 
         for member in combined_list:
-            file_path = f'datasets/GGCMI_Phase3_annual_{experiment}_{member}.nc4'
+            gcm, crop_model = member.split('_', 1)
+            file_path = f'datasets/GGCMI_Phase3_annual_{experiment}_{gcm}_{crop_model}_allcrops.nc4'
             if not os.path.exists(file_path):
                 print(colored('[SKIP]', 'red'), 'File not found:', file_path)
                 continue
